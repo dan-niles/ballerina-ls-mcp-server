@@ -502,91 +502,7 @@ class JavaCodeIndexer:
         logger.info("Indexing complete")
     
     def search(self, query: str, limit: int = 10) -> List[Dict[str, Any]]:
-        """Search for code elements matching the query"""
-        conn = None
-        try:
-            conn = sqlite3.connect(self.db_path)
-            cursor = conn.cursor()
-            
-            results = []
-            
-            # Sanitize query to prevent SQL injection issues
-            safe_query = query.replace("'", "''").replace("%", "\\%").replace("_", "\\_")
-            
-            # Search in class names and content
-            cursor.execute('''
-                SELECT c.name as class_name, c.package, c.content, f.path, c.line_start, c.line_end
-                FROM classes c
-                JOIN files f ON c.file_id = f.id
-                WHERE c.name LIKE ? ESCAPE '\\' OR c.content LIKE ? ESCAPE '\\'
-                ORDER BY 
-                    CASE WHEN c.name LIKE ? ESCAPE '\\' THEN 1 ELSE 2 END,
-                    c.name
-                LIMIT ?
-            ''', (f'%{safe_query}%', f'%{safe_query}%', f'%{safe_query}%', limit))
-            
-            for row in cursor.fetchall():
-                results.append({
-                    "type": "class",
-                    "name": row[0] or "Unknown",
-                    "package": row[1] or "",
-                    "content": (row[2][:500] + "...") if row[2] and len(row[2]) > 500 else (row[2] or ""),
-                    "file": row[3] or "",
-                    "line_start": row[4] or 0,
-                    "line_end": row[5] or 0
-                })
-            
-            # Search in method names and content
-            remaining_limit = max(0, limit - len(results))
-            if remaining_limit > 0:
-                cursor.execute('''
-                    SELECT m.name as method_name, m.signature, m.content, c.name as class_name, 
-                           c.package, f.path, m.line_start, m.line_end
-                    FROM methods m
-                    JOIN classes c ON m.class_id = c.id
-                    JOIN files f ON c.file_id = f.id
-                    WHERE m.name LIKE ? ESCAPE '\\' OR m.content LIKE ? ESCAPE '\\'
-                    ORDER BY 
-                        CASE WHEN m.name LIKE ? ESCAPE '\\' THEN 1 ELSE 2 END,
-                        m.name
-                    LIMIT ?
-                ''', (f'%{safe_query}%', f'%{safe_query}%', f'%{safe_query}%', remaining_limit))
-                
-                for row in cursor.fetchall():
-                    results.append({
-                        "type": "method",
-                        "name": row[0] or "Unknown",
-                        "signature": row[1] or "",
-                        "content": (row[2][:300] + "...") if row[2] and len(row[2]) > 300 else (row[2] or ""),
-                        "class": row[3] or "Unknown",
-                        "package": row[4] or "",
-                        "file": row[5] or "",
-                        "line_start": row[6] or 0,
-                        "line_end": row[7] or 0
-                    })
-            
-            return results
-        except sqlite3.Error as e:
-            logger.error(f"Database error during search: {e}")
-            return []
-        except Exception as e:
-            logger.error(f"Unexpected error during search: {e}")
-            return []
-        finally:
-            try:
-                if conn is not None:
-                    conn.close()
-            except:
-                pass
-    
-    @lru_cache(maxsize=100)
-    def search_cached(self, query: str, limit: int = 10) -> str:
-        """Cached version of search for frequently accessed queries"""
-        results = self.search(query, limit)
-        return json.dumps(results)
-    
-    def fuzzy_search(self, query: str, limit: int = 10) -> List[Dict[str, Any]]:
-        """Enhanced search with fuzzy matching capabilities"""
+        """Enhanced search with fuzzy matching capabilities (default search method)"""
         conn = None
         results: List[Dict[str, Any]] = []
         try:
@@ -594,7 +510,7 @@ class JavaCodeIndexer:
             cursor = conn.cursor()
             query_words = query.lower().split()
             
-            # Create a more sophisticated search query
+            # Create search conditions for each word
             search_conditions = []
             params = []
             
@@ -628,17 +544,65 @@ class JavaCodeIndexer:
                         "line_end": row[5] or 0,
                         "relevance": row[6] if len(row) > 6 else 0
                     })
+                
+                # Search methods with the same multi-word approach
+                remaining_limit = max(0, limit - len(results))
+                if remaining_limit > 0:
+                    method_conditions = []
+                    method_params = []
+                    
+                    for word in query_words:
+                        method_conditions.append("(LOWER(m.name) LIKE ? OR LOWER(m.content) LIKE ?)")
+                        method_params.extend([f'%{word}%', f'%{word}%'])
+                    
+                    method_where_clause = " AND ".join(method_conditions)
+                    
+                    cursor.execute(f'''
+                        SELECT m.name, m.signature, m.content, c.name as class_name, 
+                               c.package, f.path, m.line_start, m.line_end,
+                               (CASE WHEN LOWER(m.name) LIKE ? THEN 10 ELSE 0 END +
+                                CASE WHEN LOWER(m.name) LIKE ? THEN 5 ELSE 0 END) as relevance
+                        FROM methods m
+                        JOIN classes c ON m.class_id = c.id
+                        JOIN files f ON c.file_id = f.id
+                        WHERE {method_where_clause}
+                        ORDER BY relevance DESC, m.name
+                        LIMIT ?
+                    ''', [f'%{query.lower()}%', f'%{query_words[0]}%'] + method_params + [remaining_limit])
+                    
+                    for row in cursor.fetchall():
+                        results.append({
+                            "type": "method",
+                            "name": row[0] or "Unknown",
+                            "signature": row[1] or "",
+                            "content": (row[2][:300] + "...") if row[2] and len(row[2]) > 300 else (row[2] or ""),
+                            "class": row[3] or "Unknown",
+                            "package": row[4] or "",
+                            "file": row[5] or "",
+                            "line_start": row[6] or 0,
+                            "line_end": row[7] or 0,
+                            "relevance": row[8] if len(row) > 8 else 0
+                        })
             
             return results
+        except sqlite3.Error as e:
+            logger.error(f"Database error during search: {e}")
+            return []
         except Exception as e:
-            logger.error(f"Error in fuzzy search: {e}")
-            return results
+            logger.error(f"Unexpected error during search: {e}")
+            return []
         finally:
             try:
                 if conn is not None:
                     conn.close()
             except:
                 pass
+    
+    @lru_cache(maxsize=100)
+    def search_cached(self, query: str, limit: int = 10) -> str:
+        """Cached version of search for frequently accessed queries"""
+        results = self.search(query, limit)
+        return json.dumps(results)
 
 # Initialize FastMCP
 mcp = FastMCP("Ballerina Language Server MCP")
@@ -692,45 +656,12 @@ def search_code(query: str, limit: int = 10) -> str:
         response += f"{i}. **{result['type'].title()}: {result['name']}**\n"
         response += f"   File: {result['file']} (lines {result['line_start']}-{result['line_end']})\n"
         
-        if result['type'] == 'method':
-            response += f"   Class: {result['class']}\n"
-            response += f"   Signature: {result['signature']}\n"
-        
-        if result.get('package'):
-            response += f"   Package: {result['package']}\n"
-        
-        response += f"   Content preview:\n```java\n{result['content']}\n```\n\n"
-    
-    return response
-
-@mcp.tool()
-def advanced_search(query: str, search_type: str = "fuzzy", limit: int = 10) -> str:
-    """Advanced search with different search strategies (fuzzy, exact, regex)"""
-    if indexer is None:
-        return "Error: Repository not indexed."
-    
-    if search_type == "fuzzy":
-        results = indexer.fuzzy_search(query, limit)
-    elif search_type == "exact":
-        results = indexer.search(query, limit)
-    else:
-        return f"Unsupported search type: {search_type}. Use 'fuzzy' or 'exact'."
-    
-    if not results:
-        return f"No results found for {search_type} search: '{query}'"
-    
-    response = f"Advanced {search_type} search results for '{query}':\n\n"
-    
-    for i, result in enumerate(results, 1):
-        response += f"{i}. **{result['type'].title()}: {result['name']}**\n"
-        response += f"   File: {result['file']} (lines {result['line_start']}-{result['line_end']})\n"
-        
         if result.get('relevance'):
             response += f"   Relevance Score: {result['relevance']}\n"
         
         if result['type'] == 'method':
-            response += f"   Class: {result.get('class', 'Unknown')}\n"
-            response += f"   Signature: {result.get('signature', 'N/A')}\n"
+            response += f"   Class: {result['class']}\n"
+            response += f"   Signature: {result['signature']}\n"
         
         if result.get('package'):
             response += f"   Package: {result['package']}\n"
