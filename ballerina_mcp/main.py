@@ -191,7 +191,7 @@ class JavaCodeIndexer:
                 (scoped_identifier) @package)
         """)
         
-        captures = query.captures(root_node)
+        captures = query.captures(root_node) # type: ignore
         for node, _ in captures:
             return content[node.start_byte:node.end_byte]
         return ""
@@ -207,7 +207,7 @@ class JavaCodeIndexer:
         """)
         
         imports = []
-        captures = query.captures(root_node)
+        captures = query.captures(root_node) # type: ignore
         for node, capture_name in captures:
             if capture_name in ["import_path", "static_import_path"]:
                 import_path = content[node.start_byte:node.end_byte]
@@ -231,7 +231,7 @@ class JavaCodeIndexer:
         """)
         
         classes = []
-        captures = query.captures(root_node)
+        captures = query.captures(root_node) # type: ignore
         
         # Group captures by class/interface
         class_nodes = {}
@@ -293,7 +293,7 @@ class JavaCodeIndexer:
         """)
         
         methods = []
-        captures = query.captures(class_node)
+        captures = query.captures(class_node) # type: ignore
         
         # Group captures by method
         method_nodes = {}
@@ -374,7 +374,7 @@ class JavaCodeIndexer:
         """)
         
         fields = []
-        captures = query.captures(class_node)
+        captures = query.captures(class_node) # type: ignore
         
         # Group captures by field
         field_data = {}
