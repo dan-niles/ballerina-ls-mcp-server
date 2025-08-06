@@ -503,6 +503,7 @@ class JavaCodeIndexer:
     
     def search(self, query: str, limit: int = 10) -> List[Dict[str, Any]]:
         """Search for code elements matching the query"""
+        conn = None
         try:
             conn = sqlite3.connect(self.db_path)
             cursor = conn.cursor()
@@ -573,7 +574,8 @@ class JavaCodeIndexer:
             return []
         finally:
             try:
-                conn.close()
+                if conn is not None:
+                    conn.close()
             except:
                 pass
     
@@ -585,11 +587,11 @@ class JavaCodeIndexer:
     
     def fuzzy_search(self, query: str, limit: int = 10) -> List[Dict[str, Any]]:
         """Enhanced search with fuzzy matching capabilities"""
+        conn = None
+        results: List[Dict[str, Any]] = []
         try:
             conn = sqlite3.connect(self.db_path)
             cursor = conn.cursor()
-            
-            results = []
             query_words = query.lower().split()
             
             # Create a more sophisticated search query
@@ -630,10 +632,11 @@ class JavaCodeIndexer:
             return results
         except Exception as e:
             logger.error(f"Error in fuzzy search: {e}")
-            return []
+            return results
         finally:
             try:
-                conn.close()
+                if conn is not None:
+                    conn.close()
             except:
                 pass
 
