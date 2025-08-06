@@ -43,7 +43,10 @@ uv sync
 
 ### Usage
 
-After setting up, you can use the MCP server with Claude Desktop to query and analyze the Ballerina Language Server codebase.
+After setting up, you can use the MCP server with Claude Desktop to query and analyze the Ballerina Language Server codebase. You can verify that Claude Desktop recognizes the MCP server by clicking on the `Search and tools` button and observing the `ballerina-language-server` MCP server listed in the menu.
+
+<img width="429" height="460" alt="image" src="https://github.com/user-attachments/assets/30ccc658-9d22-48d0-aeed-5ad0f7bb4bf6" />
+
 
 ## Features
 
@@ -184,8 +187,6 @@ Find error handling patterns and exception usage throughout the codebase.
 
 #### 15. `reindex_repository()`
 Re-index the repository to pick up new changes.
-
-## Architecture
 
 ## Architecture
 
