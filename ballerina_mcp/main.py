@@ -860,7 +860,7 @@ def find_lsp_protocol_implementations(protocol_method: str = "") -> str:
     return response
 
 @mcp.tool()
-def analyze_lsp_capabilities() -> str:
+def analyze_lsp_capabilities(limit: int = 10) -> str:
     """Analyze what LSP capabilities are implemented in the server"""
     if indexer is None:
         return "Error: Repository not indexed."
@@ -874,22 +874,30 @@ def analyze_lsp_capabilities() -> str:
     
     results = {}
     for capability in capabilities:
-        matches = indexer.search(capability, limit=3)
+        matches = indexer.search(capability, limit=2)  # Reduced from 3 to 2
         if matches:
             results[capability] = matches
     
     response = "**LSP Capabilities Analysis:**\n\n"
     
+    capabilities_found = 0
     for capability, matches in results.items():
+        if capabilities_found >= limit:
+            break
+        capabilities_found += 1
+        
         response += f"**{capability}:**\n"
-        for match in matches:
+        for match in matches[:2]:  # Limit to 2 matches per capability
             response += f"  - {match['name']} in {match['file']}\n"
         response += "\n"
+    
+    if len(results) > limit:
+        response += f"... and {len(results) - limit} more capabilities found\n"
     
     return response
 
 @mcp.tool()
-def find_protocol_handlers() -> str:
+def find_protocol_handlers(limit: int = 10) -> str:
     """Find classes that handle LSP protocol messages"""
     if indexer is None:
         return "Error: Repository not indexed."
@@ -898,25 +906,31 @@ def find_protocol_handlers() -> str:
     
     results = []
     for term in handler_terms:
-        results.extend(indexer.search(term, limit=5))
+        results.extend(indexer.search(term, limit=3))  # Reduced from 5 to 3
     
     response = "**LSP Protocol Handlers:**\n\n"
     
     seen = set()
+    count = 0
     for result in results:
-        if result['name'] not in seen:
+        if result['name'] not in seen and count < limit:
             seen.add(result['name'])
-            response += f"**{result['name']}** ({result['type']})\n"
-            response += f"  Package: {result.get('package', 'N/A')}\n"
-            response += f"  File: {result['file']}\n"
+            count += 1
+            
+            response += f"{count:2d}. **{result['name']}** ({result['type']})\n"
+            response += f"    Package: {result.get('package', 'N/A')}\n"
+            response += f"    File: {result['file']}\n"
             if result.get('relevance', 0) > 5:
-                response += f"  High relevance match\n"
+                response += f"    High relevance match\n"
             response += "\n"
+    
+    if len(results) > limit:
+        response += f"... and more handlers found (use limit parameter to see more)\n"
     
     return response
 
 @mcp.tool()
-def analyze_dependencies(class_name: str) -> str:
+def analyze_dependencies(class_name: str, limit: int = 15) -> str:
     """Find what classes/methods a given class depends on and what depends on it"""
     if indexer is None:
         return "Error: Repository not indexed."
@@ -932,22 +946,29 @@ def analyze_dependencies(class_name: str) -> str:
             JOIN files f ON c.file_id = f.id
             WHERE c.content LIKE ? OR c.content LIKE ?
             ORDER BY c.name
-        """, (f'%{class_name}%', f'%{class_name.split(".")[-1]}%'))
+            LIMIT ?
+        """, (f'%{class_name}%', f'%{class_name.split(".")[-1]}%', limit))
         
         dependencies = cursor.fetchall()
         conn.close()
         
         response = f"**Dependency Analysis for '{class_name}':**\n\n"
         response += "**Classes that reference this class:**\n"
-        for name, package, path in dependencies:
-            response += f"- {name} ({package}) in {path}\n"
+        for i, (name, package, path) in enumerate(dependencies, 1):
+            # Shorten long paths
+            if len(path) > 50:
+                path = "..." + path[-47:]
+            response += f"{i:2d}. {name} ({package}) in {path}\n"
+        
+        if len(dependencies) == limit:
+            response += f"\n... (showing top {limit} dependencies)\n"
         
         return response
     except Exception as e:
         return f"Error analyzing dependencies: {str(e)}"
 
 @mcp.tool()
-def find_design_patterns(pattern_type: str = "") -> str:
+def find_design_patterns(pattern_type: str = "", limit: int = 15) -> str:
     """Identify common design patterns in the codebase (Factory, Builder, Observer, etc.)"""
     if indexer is None:
         return "Error: Repository not indexed."
@@ -970,16 +991,22 @@ def find_design_patterns(pattern_type: str = "") -> str:
         search_terms = [term for terms in patterns.values() for term in terms]
     
     results = []
-    for term in search_terms[:10]:  # Limit searches
-        results.extend(indexer.search(term, limit=3))
+    for term in search_terms[:8]:  # Reduced from 10 to 8
+        results.extend(indexer.search(term, limit=2))  # Reduced from 3 to 2
     
     response = f"**Design Patterns Found:**\n\n"
     seen = set()
+    count = 0
+    
     for result in results:
         key = f"{result['name']}-{result['type']}"
-        if key not in seen:
+        if key not in seen and count < limit:
             seen.add(key)
-            response += f"- **{result['name']}** ({result['type']}) in {result['file']}\n"
+            count += 1
+            response += f"{count:2d}. **{result['name']}** ({result['type']}) in {result['file']}\n"
+    
+    if len(results) > limit:
+        response += f"\n... and more patterns found (use limit parameter to see more)\n"
     
     return response
 
@@ -1052,7 +1079,7 @@ def analyze_configuration() -> str:
     return response
 
 @mcp.tool()
-def get_file_structure_overview() -> str:
+def get_file_structure_overview(limit: int = 15) -> str:
     """Get an overview of the repository file structure and organization"""
     if indexer is None:
         return "Error: Repository not indexed."
@@ -1061,24 +1088,35 @@ def get_file_structure_overview() -> str:
         conn = sqlite3.connect(indexer.db_path)
         cursor = conn.cursor()
         
-        # Get package structure
+        # Get total package count first
+        cursor.execute("SELECT COUNT(DISTINCT package) FROM classes WHERE package != ''")
+        total_packages = cursor.fetchone()[0]
+        
+        # Get package structure with limit
         cursor.execute("""
-            SELECT package, COUNT(*) as class_count,
-                   GROUP_CONCAT(DISTINCT SUBSTR(name, 1, 20) || '...' ) as sample_classes
+            SELECT package, COUNT(*) as class_count
             FROM classes 
             WHERE package != ''
             GROUP BY package
             ORDER BY class_count DESC
-        """)
+            LIMIT ?
+        """, (limit,))
         
         packages = cursor.fetchall()
         conn.close()
         
         response = "**Repository Structure Overview:**\n\n"
+        response += f"📦 **Total packages:** {total_packages}\n"
+        response += f"📋 **Showing top {len(packages)} packages by class count:**\n\n"
         
-        for package, count, samples in packages:
-            response += f"**{package}** ({count} classes)\n"
-            response += f"  Sample classes: {samples}\n\n"
+        for i, (package, count) in enumerate(packages, 1):
+            # Shorten long package names
+            display_package = package if len(package) <= 50 else package[:47] + "..."
+            response += f"{i:2d}. **{display_package}** ({count} classes)\n"
+        
+        if total_packages > limit:
+            remaining = total_packages - limit
+            response += f"\n... and {remaining} more packages (use limit parameter to see more)\n"
         
         return response
     except Exception as e:
