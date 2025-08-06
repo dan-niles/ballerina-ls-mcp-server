@@ -113,6 +113,19 @@ class JavaCodeIndexer:
             )
         ''')
         
+        # Check if we need to add missing columns to existing methods table
+        cursor.execute("PRAGMA table_info(methods)")
+        columns = [column[1] for column in cursor.fetchall()]
+        
+        if 'return_type' not in columns:
+            cursor.execute('ALTER TABLE methods ADD COLUMN return_type TEXT')
+        if 'parameters' not in columns:
+            cursor.execute('ALTER TABLE methods ADD COLUMN parameters TEXT')
+        if 'visibility' not in columns:
+            cursor.execute('ALTER TABLE methods ADD COLUMN visibility TEXT')
+        if 'is_static' not in columns:
+            cursor.execute('ALTER TABLE methods ADD COLUMN is_static BOOLEAN')
+        
         cursor.execute('''
             CREATE TABLE IF NOT EXISTS fields (
                 id INTEGER PRIMARY KEY,
@@ -186,239 +199,222 @@ class JavaCodeIndexer:
     
     def extract_package(self, root_node, content: str) -> str:
         """Extract package declaration using Tree-sitter"""
-        query = self.java_language.query("""
-            (package_declaration 
-                (scoped_identifier) @package)
-        """)
-        
-        captures = query.captures(root_node) # type: ignore
-        for node, _ in captures:
-            return content[node.start_byte:node.end_byte]
+        try:
+            # Use a simple regex fallback for package extraction
+            import re
+            package_match = re.search(r'package\s+([\w\.]+)\s*;', content)
+            if package_match:
+                return package_match.group(1)
+        except Exception:
+            pass
         return ""
     
     def extract_imports(self, root_node, content: str) -> List[Dict[str, Any]]:
         """Extract import statements using Tree-sitter"""
-        query = self.java_language.query("""
-            (import_declaration 
-                (scoped_identifier) @import_path) @import
-            (import_declaration 
-                "static"
-                (scoped_identifier) @static_import_path) @static_import
-        """)
-        
-        imports = []
-        captures = query.captures(root_node) # type: ignore
-        for node, capture_name in captures:
-            if capture_name in ["import_path", "static_import_path"]:
-                import_path = content[node.start_byte:node.end_byte]
-                is_static = capture_name == "static_import_path"
+        try:
+            # Use regex fallback for import extraction
+            import re
+            imports = []
+            
+            # Find regular imports
+            import_matches = re.finditer(r'import\s+([\w\.]+)\s*;', content)
+            for match in import_matches:
                 imports.append({
-                    "import_path": import_path,
-                    "is_static": is_static
+                    "import_path": match.group(1),
+                    "is_static": False
                 })
-        
-        return imports
+            
+            # Find static imports
+            static_import_matches = re.finditer(r'import\s+static\s+([\w\.]+)\s*;', content)
+            for match in static_import_matches:
+                imports.append({
+                    "import_path": match.group(1),
+                    "is_static": True
+                })
+            
+            return imports
+        except Exception:
+            return []
     
     def extract_classes(self, root_node, content: str) -> List[Dict[str, Any]]:
         """Extract classes and interfaces using Tree-sitter"""
-        query = self.java_language.query("""
-            (class_declaration 
-                name: (identifier) @class_name) @class_body
-            (interface_declaration 
-                name: (identifier) @interface_name) @interface_body
-            (enum_declaration 
-                name: (identifier) @enum_name) @enum_body
-        """)
-        
-        classes = []
-        captures = query.captures(root_node) # type: ignore
-        
-        # Group captures by class/interface
-        class_nodes = {}
-        for node, capture_name in captures:
-            if capture_name.endswith("_body"):
-                class_type = capture_name.replace("_body", "")
-                class_nodes[node] = {"type": class_type, "node": node}
-            elif capture_name.endswith("_name"):
-                # Find the parent class/interface node
-                parent = node.parent
-                while parent and parent not in class_nodes:
-                    parent = parent.parent
-                if parent:
-                    class_nodes[parent]["name"] = content[node.start_byte:node.end_byte]
-        
-        for class_data in class_nodes.values():
-            if "name" not in class_data:
-                continue
-                
-            node = class_data["node"]
-            class_name = class_data["name"]
-            class_type = class_data["type"]
+        try:
+            # Use regex fallback for class extraction
+            import re
+            classes = []
             
-            # Get class content
-            class_content = content[node.start_byte:node.end_byte]
+            # Find classes, interfaces, and enums
+            patterns = [
+                (r'(public\s+|private\s+|protected\s+)?class\s+(\w+)', 'class'),
+                (r'(public\s+|private\s+|protected\s+)?interface\s+(\w+)', 'interface'),
+                (r'(public\s+|private\s+|protected\s+)?enum\s+(\w+)', 'enum')
+            ]
             
-            # Get line numbers
-            lines_before = content[:node.start_byte].count('\n')
-            lines_in_class = class_content.count('\n')
+            for pattern, class_type in patterns:
+                for match in re.finditer(pattern, content):
+                    class_name = match.group(2)
+                    start_pos = match.start()
+                    
+                    # Find the class body by looking for matching braces
+                    brace_count = 0
+                    body_start = content.find('{', start_pos)
+                    if body_start == -1:
+                        continue
+                    
+                    body_end = body_start
+                    for i, char in enumerate(content[body_start:], body_start):
+                        if char == '{':
+                            brace_count += 1
+                        elif char == '}':
+                            brace_count -= 1
+                            if brace_count == 0:
+                                body_end = i + 1
+                                break
+                    
+                    class_content = content[start_pos:body_end]
+                    
+                    # Calculate line numbers
+                    lines_before = content[:start_pos].count('\n')
+                    lines_in_class = class_content.count('\n')
+                    
+                    # Extract methods and fields from this class
+                    methods = self.extract_methods(class_content)
+                    fields = self.extract_fields(class_content)
+                    
+                    classes.append({
+                        "name": class_name,
+                        "type": class_type,
+                        "content": class_content,
+                        "line_start": lines_before + 1,
+                        "line_end": lines_before + lines_in_class + 1,
+                        "methods": methods,
+                        "fields": fields
+                    })
             
-            # Extract methods and fields from this class
-            methods = self.extract_methods(node, content)
-            fields = self.extract_fields(node, content)
-            
-            classes.append({
-                "name": class_name,
-                "type": class_type,
-                "content": class_content,
-                "line_start": lines_before + 1,
-                "line_end": lines_before + lines_in_class + 1,
-                "methods": methods,
-                "fields": fields
-            })
-        
-        return classes
+            return classes
+        except Exception:
+            return []
     
-    def extract_methods(self, class_node, content: str) -> List[Dict[str, Any]]:
-        """Extract methods from a class node using Tree-sitter"""
-        query = self.java_language.query("""
-            (method_declaration
-                (modifiers)? @modifiers
-                type: (_) @return_type
-                name: (identifier) @method_name
-                parameters: (formal_parameters) @parameters) @method_body
-            (constructor_declaration
-                (modifiers)? @constructor_modifiers
-                name: (identifier) @constructor_name
-                parameters: (formal_parameters) @constructor_parameters) @constructor_body
-        """)
-        
-        methods = []
-        captures = query.captures(class_node) # type: ignore
-        
-        # Group captures by method
-        method_nodes = {}
-        for node, capture_name in captures:
-            if capture_name.endswith("_body"):
-                method_type = "constructor" if "constructor" in capture_name else "method"
-                method_nodes[node] = {"type": method_type, "node": node}
-            else:
-                # Find the parent method node
-                parent = node.parent
-                while parent and parent not in method_nodes:
-                    parent = parent.parent
-                if parent:
-                    if capture_name.endswith("_name"):
-                        method_nodes[parent]["name"] = content[node.start_byte:node.end_byte]
-                    elif "return_type" in capture_name:
-                        method_nodes[parent]["return_type"] = content[node.start_byte:node.end_byte]
-                    elif "parameters" in capture_name:
-                        method_nodes[parent]["parameters"] = content[node.start_byte:node.end_byte]
-                    elif "modifiers" in capture_name:
-                        method_nodes[parent]["modifiers"] = content[node.start_byte:node.end_byte]
-        
-        for method_data in method_nodes.values():
-            if "name" not in method_data:
-                continue
+    def extract_methods(self, content: str) -> List[Dict[str, Any]]:
+        """Extract methods from class content using regex"""
+        try:
+            import re
+            methods = []
+            
+            # Simple method pattern - this won't catch all edge cases but will work for most methods
+            method_pattern = r'(public|private|protected|static|\s)*\s*(\w+)\s+(\w+)\s*\([^)]*\)\s*\{'
+            
+            for match in re.finditer(method_pattern, content):
+                modifiers = match.group(1) or ""
+                return_type = match.group(2)
+                method_name = match.group(3)
                 
-            node = method_data["node"]
-            method_name = method_data["name"]
-            return_type = method_data.get("return_type", "void" if method_data["type"] == "constructor" else "")
-            parameters = method_data.get("parameters", "()")
-            modifiers = method_data.get("modifiers", "")
+                # Skip common non-method matches
+                if method_name in ['class', 'interface', 'enum', 'if', 'for', 'while', 'switch']:
+                    continue
+                    
+                # Find method body
+                method_start = match.start()
+                brace_start = content.find('{', method_start)
+                if brace_start == -1:
+                    continue
+                
+                # Find matching closing brace
+                brace_count = 0
+                method_end = brace_start
+                for i, char in enumerate(content[brace_start:], brace_start):
+                    if char == '{':
+                        brace_count += 1
+                    elif char == '}':
+                        brace_count -= 1
+                        if brace_count == 0:
+                            method_end = i + 1
+                            break
+                
+                method_content = content[method_start:method_end]
+                
+                # Calculate line numbers
+                lines_before = content[:method_start].count('\n')
+                lines_in_method = method_content.count('\n')
+                
+                # Parse visibility and static
+                visibility = "package"
+                is_static = False
+                if "public" in modifiers:
+                    visibility = "public"
+                elif "private" in modifiers:
+                    visibility = "private"
+                elif "protected" in modifiers:
+                    visibility = "protected"
+                
+                if "static" in modifiers:
+                    is_static = True
+                
+                signature = f"{modifiers.strip()} {return_type} {method_name}(...)"
+                
+                methods.append({
+                    "name": method_name,
+                    "signature": signature,
+                    "return_type": return_type,
+                    "parameters": "(...)",  # Simplified
+                    "content": method_content,
+                    "line_start": lines_before + 1,
+                    "line_end": lines_before + lines_in_method + 1,
+                    "visibility": visibility,
+                    "is_static": is_static
+                })
             
-            # Build signature
-            signature = f"{modifiers} {return_type} {method_name}{parameters}".strip()
-            
-            # Get method content
-            method_content = content[node.start_byte:node.end_byte]
-            
-            # Get line numbers
-            lines_before = content[:node.start_byte].count('\n')
-            lines_in_method = method_content.count('\n')
-            
-            # Parse visibility and static
-            visibility = "package"
-            is_static = False
-            if "public" in modifiers:
-                visibility = "public"
-            elif "private" in modifiers:
-                visibility = "private"
-            elif "protected" in modifiers:
-                visibility = "protected"
-            
-            if "static" in modifiers:
-                is_static = True
-            
-            methods.append({
-                "name": method_name,
-                "signature": signature,
-                "return_type": return_type,
-                "parameters": parameters,
-                "content": method_content,
-                "line_start": lines_before + 1,
-                "line_end": lines_before + lines_in_method + 1,
-                "visibility": visibility,
-                "is_static": is_static
-            })
-        
-        return methods
+            return methods
+        except Exception:
+            return []
     
-    def extract_fields(self, class_node, content: str) -> List[Dict[str, Any]]:
-        """Extract fields from a class node using Tree-sitter"""
-        query = self.java_language.query("""
-            (field_declaration
-                (modifiers)? @modifiers
-                type: (_) @field_type
-                declarator: (variable_declarator
-                    name: (identifier) @field_name))
-        """)
-        
-        fields = []
-        captures = query.captures(class_node) # type: ignore
-        
-        # Group captures by field
-        field_data = {}
-        for node, capture_name in captures:
-            if capture_name == "field_name":
-                field_name = content[node.start_byte:node.end_byte]
-                line_num = content[:node.start_byte].count('\n') + 1
-                field_data[node] = {"name": field_name, "line": line_num}
-            elif capture_name == "field_type":
-                # Find associated field name
-                for name_node, data in field_data.items():
-                    if abs(node.start_byte - name_node.start_byte) < 100:  # Rough proximity
-                        data["type"] = content[node.start_byte:node.end_byte]
-                        break
-            elif capture_name == "modifiers":
-                # Find associated field name
-                for name_node, data in field_data.items():
-                    if abs(node.start_byte - name_node.start_byte) < 100:  # Rough proximity
-                        modifiers = content[node.start_byte:node.end_byte]
-                        data["modifiers"] = modifiers
-                        
-                        # Parse visibility and static
-                        if "public" in modifiers:
-                            data["visibility"] = "public"
-                        elif "private" in modifiers:
-                            data["visibility"] = "private"
-                        elif "protected" in modifiers:
-                            data["visibility"] = "protected"
-                        else:
-                            data["visibility"] = "package"
-                        
-                        data["is_static"] = "static" in modifiers
-                        break
-        
-        for data in field_data.values():
-            fields.append({
-                "name": data["name"],
-                "type": data.get("type", "unknown"),
-                "visibility": data.get("visibility", "package"),
-                "is_static": data.get("is_static", False),
-                "line_number": data["line"]
-            })
-        
-        return fields
+    def extract_fields(self, content: str) -> List[Dict[str, Any]]:
+        """Extract fields from class content using regex"""
+        try:
+            import re
+            fields = []
+            
+            # Simple field pattern - looks for field declarations
+            field_pattern = r'(public|private|protected|static|final|\s)*\s*(\w+)\s+(\w+)\s*[;=]'
+            
+            for match in re.finditer(field_pattern, content):
+                modifiers = match.group(1) or ""
+                field_type = match.group(2)
+                field_name = match.group(3)
+                
+                # Skip common non-field matches
+                if field_name in ['class', 'interface', 'enum', 'if', 'for', 'while', 'return', 'new']:
+                    continue
+                if field_type in ['class', 'interface', 'enum', 'if', 'for', 'while', 'return']:
+                    continue
+                
+                # Calculate line number
+                line_num = content[:match.start()].count('\n') + 1
+                
+                # Parse visibility and static
+                visibility = "package"
+                is_static = False
+                if "public" in modifiers:
+                    visibility = "public"
+                elif "private" in modifiers:
+                    visibility = "private"
+                elif "protected" in modifiers:
+                    visibility = "protected"
+                
+                if "static" in modifiers:
+                    is_static = True
+                
+                fields.append({
+                    "name": field_name,
+                    "type": field_type,
+                    "visibility": visibility,
+                    "is_static": is_static,
+                    "line_number": line_num
+                })
+            
+            return fields
+        except Exception:
+            return []
     
     def index_repository(self):
         """Index all Java files in the repository"""
