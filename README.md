@@ -2,40 +2,6 @@
 
 An intelligent Model Context Protocol (MCP) server for querying and analyzing Java language server codebases, specifically designed for the Ballerina Language Server project.
 
-## Features
-
-### 🔍 **Advanced Code Search & Discovery**
-- **Enhanced Fuzzy Search**: Multi-word matching with relevance scoring as the default search method
-- **Similarity Search**: Find methods with similar names using phonetic matching
-- **Class Information**: Detailed class analysis with methods, fields, and context
-- **Method Hierarchy**: Explore method overrides and inheritance patterns
-
-### 📊 **Repository Analytics & Insights**
-- **Repository Statistics**: Comprehensive metrics (files, classes, methods, packages)
-- **Package Analysis**: Distribution and organization insights
-- **Code Complexity**: Method complexity analysis with control structure metrics
-- **File Structure**: Repository organization and architecture overview
-- **Dependency Analysis**: Class dependency mapping and usage patterns
-
-### 🏗️ **LSP Protocol Specialized Tools**
-- **Protocol Implementation Discovery**: Find specific LSP method implementations
-- **Capability Analysis**: Analyze implemented LSP features and coverage
-- **Protocol Handler Detection**: Identify message handlers and service providers
-- **Language Server Architecture**: Understand LSP server structure and patterns
-
-### 🎨 **Design Pattern Recognition**
-- **Pattern Detection**: Identify common patterns (Factory, Observer, Singleton, etc.)
-- **Architecture Analysis**: Understand design decisions and code organization
-- **Configuration Discovery**: Find setup and configuration code
-- **Error Handling**: Analyze exception patterns and error management
-
-### ⚡ **Performance Optimized**
-- **SQLite-based Indexing**: Fast queries with structured data storage
-- **Regex-based Parsing**: Reliable Java code analysis with fallback strategies  
-- **Output Length Management**: Pagination and limits to prevent overwhelming responses
-- **Incremental Re-indexing**: Efficient updates for repository changes
-- **Query Caching**: LRU cache for frequently accessed data
-
 ## Installation
 
 ### Prerequisites
@@ -78,6 +44,40 @@ uv sync
 ### Usage
 
 After setting up, you can use the MCP server with Claude Desktop to query and analyze the Ballerina Language Server codebase.
+
+## Features
+
+### 🔍 **Advanced Code Search & Discovery**
+- **Enhanced Fuzzy Search**: Multi-word matching with relevance scoring as the default search method
+- **Similarity Search**: Find methods with similar names using phonetic matching
+- **Class Information**: Detailed class analysis with methods, fields, and context
+- **Method Hierarchy**: Explore method overrides and inheritance patterns
+
+### 📊 **Repository Analytics & Insights**
+- **Repository Statistics**: Comprehensive metrics (files, classes, methods, packages)
+- **Package Analysis**: Distribution and organization insights
+- **Code Complexity**: Method complexity analysis with control structure metrics
+- **File Structure**: Repository organization and architecture overview
+- **Dependency Analysis**: Class dependency mapping and usage patterns
+
+### 🏗️ **LSP Protocol Specialized Tools**
+- **Protocol Implementation Discovery**: Find specific LSP method implementations
+- **Capability Analysis**: Analyze implemented LSP features and coverage
+- **Protocol Handler Detection**: Identify message handlers and service providers
+- **Language Server Architecture**: Understand LSP server structure and patterns
+
+### 🎨 **Design Pattern Recognition**
+- **Pattern Detection**: Identify common patterns (Factory, Observer, Singleton, etc.)
+- **Architecture Analysis**: Understand design decisions and code organization
+- **Configuration Discovery**: Find setup and configuration code
+- **Error Handling**: Analyze exception patterns and error management
+
+### ⚡ **Performance Optimized**
+- **SQLite-based Indexing**: Fast queries with structured data storage
+- **Regex-based Parsing**: Reliable Java code analysis with fallback strategies  
+- **Output Length Management**: Pagination and limits to prevent overwhelming responses
+- **Incremental Re-indexing**: Efficient updates for repository changes
+- **Query Caching**: LRU cache for frequently accessed data
 
 ### Available MCP Tools
 
