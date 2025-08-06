@@ -863,6 +863,299 @@ def find_lsp_protocol_implementations(protocol_method: str = "") -> str:
     
     return response
 
+@mcp.tool()
+def analyze_lsp_capabilities() -> str:
+    """Analyze what LSP capabilities are implemented in the server"""
+    if indexer is None:
+        return "Error: Repository not indexed."
+    
+    capabilities = [
+        "completion", "hover", "signatureHelp", "definition", "references",
+        "documentHighlight", "documentSymbol", "codeAction", "codeLens",
+        "formatting", "rangeFormatting", "rename", "workspaceSymbol",
+        "executeCommand", "didOpen", "didChange", "didClose", "didSave"
+    ]
+    
+    results = {}
+    for capability in capabilities:
+        matches = indexer.search(capability, limit=3)
+        if matches:
+            results[capability] = matches
+    
+    response = "**LSP Capabilities Analysis:**\n\n"
+    
+    for capability, matches in results.items():
+        response += f"**{capability}:**\n"
+        for match in matches:
+            response += f"  - {match['name']} in {match['file']}\n"
+        response += "\n"
+    
+    return response
+
+@mcp.tool()
+def find_protocol_handlers() -> str:
+    """Find classes that handle LSP protocol messages"""
+    if indexer is None:
+        return "Error: Repository not indexed."
+    
+    handler_terms = ["Handler", "Provider", "Service", "Manager", "Processor"]
+    
+    results = []
+    for term in handler_terms:
+        results.extend(indexer.search(term, limit=5))
+    
+    response = "**LSP Protocol Handlers:**\n\n"
+    
+    seen = set()
+    for result in results:
+        if result['name'] not in seen:
+            seen.add(result['name'])
+            response += f"**{result['name']}** ({result['type']})\n"
+            response += f"  Package: {result.get('package', 'N/A')}\n"
+            response += f"  File: {result['file']}\n"
+            if result.get('relevance', 0) > 5:
+                response += f"  High relevance match\n"
+            response += "\n"
+    
+    return response
+
+@mcp.tool()
+def analyze_dependencies(class_name: str) -> str:
+    """Find what classes/methods a given class depends on and what depends on it"""
+    if indexer is None:
+        return "Error: Repository not indexed."
+    
+    try:
+        conn = sqlite3.connect(indexer.db_path)
+        cursor = conn.cursor()
+        
+        # Find classes that import/use this class
+        cursor.execute("""
+            SELECT DISTINCT c.name, c.package, f.path
+            FROM classes c
+            JOIN files f ON c.file_id = f.id
+            WHERE c.content LIKE ? OR c.content LIKE ?
+            ORDER BY c.name
+        """, (f'%{class_name}%', f'%{class_name.split(".")[-1]}%'))
+        
+        dependencies = cursor.fetchall()
+        conn.close()
+        
+        response = f"**Dependency Analysis for '{class_name}':**\n\n"
+        response += "**Classes that reference this class:**\n"
+        for name, package, path in dependencies:
+            response += f"- {name} ({package}) in {path}\n"
+        
+        return response
+    except Exception as e:
+        return f"Error analyzing dependencies: {str(e)}"
+
+@mcp.tool()
+def find_design_patterns(pattern_type: str = "") -> str:
+    """Identify common design patterns in the codebase (Factory, Builder, Observer, etc.)"""
+    if indexer is None:
+        return "Error: Repository not indexed."
+    
+    patterns = {
+        "factory": ["Factory", "Creator", "Builder"],
+        "observer": ["Observer", "Listener", "Event", "Handler"],
+        "singleton": ["Singleton", "Instance"],
+        "adapter": ["Adapter", "Wrapper"],
+        "decorator": ["Decorator", "Wrapper"],
+        "visitor": ["Visitor", "Accept"],
+        "strategy": ["Strategy", "Policy"],
+        "command": ["Command", "Action", "Execute"]
+    }
+    
+    if pattern_type and pattern_type.lower() in patterns:
+        search_terms = patterns[pattern_type.lower()]
+    else:
+        # Search for all common patterns
+        search_terms = [term for terms in patterns.values() for term in terms]
+    
+    results = []
+    for term in search_terms[:10]:  # Limit searches
+        results.extend(indexer.search(term, limit=3))
+    
+    response = f"**Design Patterns Found:**\n\n"
+    seen = set()
+    for result in results:
+        key = f"{result['name']}-{result['type']}"
+        if key not in seen:
+            seen.add(key)
+            response += f"- **{result['name']}** ({result['type']}) in {result['file']}\n"
+    
+    return response
+
+@mcp.tool()
+def get_method_hierarchy(method_name: str) -> str:
+    """Find method overrides, implementations, and inheritance hierarchy"""
+    if indexer is None:
+        return "Error: Repository not indexed."
+    
+    try:
+        conn = sqlite3.connect(indexer.db_path)
+        cursor = conn.cursor()
+        
+        # Find all methods with this name
+        cursor.execute("""
+            SELECT m.name, m.signature, c.name as class_name, c.package, f.path, 
+                   m.visibility, m.is_static, c.content
+            FROM methods m
+            JOIN classes c ON m.class_id = c.id
+            JOIN files f ON c.file_id = f.id
+            WHERE m.name = ?
+            ORDER BY c.name
+        """, (method_name,))
+        
+        methods = cursor.fetchall()
+        conn.close()
+        
+        if not methods:
+            return f"No methods found with name: {method_name}"
+        
+        response = f"**Method Hierarchy for '{method_name}':**\n\n"
+        
+        for name, signature, class_name, package, path, visibility, is_static, class_content in methods:
+            response += f"**{class_name}.{name}**\n"
+            response += f"  Package: {package}\n"
+            response += f"  File: {path}\n"
+            response += f"  Signature: {signature}\n"
+            response += f"  Visibility: {visibility}\n"
+            response += f"  Static: {is_static}\n"
+            
+            # Check if class extends/implements others
+            if "extends" in class_content or "implements" in class_content:
+                response += f"  Inheritance: Found in class definition\n"
+            
+            response += "\n"
+        
+        return response
+    except Exception as e:
+        return f"Error analyzing method hierarchy: {str(e)}"
+
+@mcp.tool()
+def analyze_configuration() -> str:
+    """Find configuration files, properties, and setup code"""
+    if indexer is None:
+        return "Error: Repository not indexed."
+    
+    config_terms = ["Config", "Properties", "Settings", "Options", "Parameter"]
+    
+    results = []
+    for term in config_terms:
+        results.extend(indexer.search(term, limit=3))
+    
+    response = "**Configuration Analysis:**\n\n"
+    
+    for result in results:
+        response += f"**{result['name']}** ({result['type']})\n"
+        response += f"  File: {result['file']}\n"
+        response += f"  Package: {result.get('package', 'N/A')}\n\n"
+    
+    return response
+
+@mcp.tool()
+def get_file_structure_overview() -> str:
+    """Get an overview of the repository file structure and organization"""
+    if indexer is None:
+        return "Error: Repository not indexed."
+    
+    try:
+        conn = sqlite3.connect(indexer.db_path)
+        cursor = conn.cursor()
+        
+        # Get package structure
+        cursor.execute("""
+            SELECT package, COUNT(*) as class_count,
+                   GROUP_CONCAT(DISTINCT SUBSTR(name, 1, 20) || '...' ) as sample_classes
+            FROM classes 
+            WHERE package != ''
+            GROUP BY package
+            ORDER BY class_count DESC
+        """)
+        
+        packages = cursor.fetchall()
+        conn.close()
+        
+        response = "**Repository Structure Overview:**\n\n"
+        
+        for package, count, samples in packages:
+            response += f"**{package}** ({count} classes)\n"
+            response += f"  Sample classes: {samples}\n\n"
+        
+        return response
+    except Exception as e:
+        return f"Error analyzing structure: {str(e)}"
+    
+@mcp.tool()
+def analyze_code_complexity() -> str:
+    """Analyze code complexity metrics for the repository"""
+    if indexer is None:
+        return "Error: Repository not indexed."
+    
+    try:
+        conn = sqlite3.connect(indexer.db_path)
+        cursor = conn.cursor()
+        
+        # Get method complexity indicators
+        cursor.execute("""
+            SELECT m.name, c.name as class_name, 
+                   LENGTH(m.content) as method_size,
+                   (LENGTH(m.content) - LENGTH(REPLACE(m.content, 'if', ''))) / 2 as if_count,
+                   (LENGTH(m.content) - LENGTH(REPLACE(m.content, 'for', ''))) / 3 as for_count,
+                   (LENGTH(m.content) - LENGTH(REPLACE(m.content, 'while', ''))) / 5 as while_count
+            FROM methods m
+            JOIN classes c ON m.class_id = c.id
+            ORDER BY method_size DESC
+            LIMIT 10
+        """)
+        
+        complex_methods = cursor.fetchall()
+        conn.close()
+        
+        response = "**Code Complexity Analysis:**\n\n"
+        response += "**Most Complex Methods (by size and control structures):**\n\n"
+        
+        for name, class_name, size, if_count, for_count, while_count in complex_methods:
+            complexity_score = if_count + for_count + while_count
+            response += f"**{class_name}.{name}**\n"
+            response += f"  Size: {size} characters\n"
+            response += f"  Control structures: {complexity_score} (if: {if_count}, for: {for_count}, while: {while_count})\n\n"
+        
+        return response
+    except Exception as e:
+        return f"Error analyzing complexity: {str(e)}"
+
+@mcp.tool()
+def find_error_handling_patterns() -> str:
+    """Find error handling patterns and exception usage"""
+    if indexer is None:
+        return "Error: Repository not indexed."
+    
+    error_terms = ["Exception", "Error", "try", "catch", "throw", "throws"]
+    
+    results = []
+    for term in error_terms:
+        matches = indexer.search(term, limit=3)
+        results.extend(matches)
+    
+    response = "**Error Handling Patterns:**\n\n"
+    
+    seen = set()
+    for result in results:
+        key = f"{result['name']}-{result['file']}"
+        if key not in seen:
+            seen.add(key)
+            response += f"**{result['name']}** in {result['file']}\n"
+            # Show a snippet of error handling
+            content = result['content']
+            if any(term in content for term in ["try", "catch", "throw"]):
+                response += f"  Contains error handling code\n"
+            response += "\n"
+    
+    return response
+
 def main():
     """Main entry point for the MCP server"""
     # Initialize indexer before starting server
