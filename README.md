@@ -39,47 +39,45 @@ An intelligent Model Context Protocol (MCP) server for querying and analyzing Ja
 ## Installation
 
 ### Prerequisites
-- Python 3.13+
+- Claude Desktop
 - Git (for cloning repositories)
+- [uv](https://docs.astral.sh/uv/getting-started/installation/) - Easier way to run Python scripts :)
 
 ### Setup
 1. Clone this repository
-2. Install dependencies:
-   ```bash
-   pip install fastmcp tree-sitter tree-sitter-java
-   ```
-
-### Alternative: Using uv
+2. Install dependencies: Using uv
 ```bash
-uv pip install fastmcp tree-sitter tree-sitter-java
+uv sync
 ```
-
-## Configuration
-
-Set the required environment variable:
-```bash
-export BALLERINA_REPO_PATH="/path/to/ballerina-lang-repository"
+3. Update `claude_desktop_config.json` to include the MCP server path, to use this MCP server with Claude Desktop . It should be located at:
 ```
-
-Optional environment variables:
-```bash
-export BALLERINA_DB_PATH="custom_index.db"      # Default: ballerina_index.db
-export BALLERINA_MAX_FILE_SIZE="20971520"       # Default: 10MB (in bytes)
+/Users/[your_username]/Library/Application Support/Claude/claude_desktop_config.json
 ```
-
-## Usage
-
-### Running the Server
-```bash
-# Option 1: Using the installed script (after installation)
-ballerina-mcp
-
-# Option 2: Using the run script
-python run.py
-
-# Option 3: Using the module directly
-python -m ballerina_mcp.main
+4. Add the following entry in `claude_desktop_config.json`:
+```json
+{
+  "mcpServers": {
+    "ballerina-language-server": {
+      "command": "uv",
+      "args": [
+        "--directory",
+        "<PATH_TO_BALLERINA_LS_MCP_SERVER>",
+        "run",
+        "--active",
+        "run.py"
+      ],
+      "env": {
+        "BALLERINA_REPO_PATH": "<PATH_TO_BALLERINA_LANGUAGE_SERVER_REPO>"
+      }
+    }
+  }
+}
 ```
+5. Restart Claude Desktop to apply the changes.
+
+### Usage
+
+After setting up, you can use the MCP server with Claude Desktop to query and analyze the Ballerina Language Server codebase.
 
 ### Available MCP Tools
 
@@ -301,17 +299,6 @@ logging.getLogger("ballerina-mcp").setLevel(logging.DEBUG)
 1. Add new Tree-sitter language parsers
 2. Update `ServerConfig.supported_extensions`
 3. Modify parsing logic in `JavaCodeIndexer`
-
-## Contributing
-
-1. Fork the repository
-2. Create a feature branch
-3. Add tests for new functionality
-4. Submit a pull request
-
-## License
-
-[Add your license information here]
 
 ## Related Projects
 
