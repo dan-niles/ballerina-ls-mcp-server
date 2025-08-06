@@ -4,27 +4,37 @@ An intelligent Model Context Protocol (MCP) server for querying and analyzing Ja
 
 ## Features
 
-### 🔍 **Advanced Code Search**
-- **Basic Search**: Search through classes, methods, and fields by name or content
-- **Fuzzy Search**: Enhanced search with relevance scoring and multi-word matching
+### 🔍 **Advanced Code Search & Discovery**
+- **Enhanced Fuzzy Search**: Multi-word matching with relevance scoring as the default search method
 - **Similarity Search**: Find methods with similar names using phonetic matching
+- **Class Information**: Detailed class analysis with methods, fields, and context
+- **Method Hierarchy**: Explore method overrides and inheritance patterns
 
-### 📊 **Repository Analytics**
-- Repository statistics (file count, class count, method count)
-- Package distribution analysis
-- Largest classes identification
-- Code metrics and insights
+### 📊 **Repository Analytics & Insights**
+- **Repository Statistics**: Comprehensive metrics (files, classes, methods, packages)
+- **Package Analysis**: Distribution and organization insights
+- **Code Complexity**: Method complexity analysis with control structure metrics
+- **File Structure**: Repository organization and architecture overview
+- **Dependency Analysis**: Class dependency mapping and usage patterns
 
-### 🏗️ **LSP Protocol Discovery**
-- Find LSP protocol method implementations
-- Search for specific language server features
-- Analyze protocol handler patterns
+### 🏗️ **LSP Protocol Specialized Tools**
+- **Protocol Implementation Discovery**: Find specific LSP method implementations
+- **Capability Analysis**: Analyze implemented LSP features and coverage
+- **Protocol Handler Detection**: Identify message handlers and service providers
+- **Language Server Architecture**: Understand LSP server structure and patterns
+
+### 🎨 **Design Pattern Recognition**
+- **Pattern Detection**: Identify common patterns (Factory, Observer, Singleton, etc.)
+- **Architecture Analysis**: Understand design decisions and code organization
+- **Configuration Discovery**: Find setup and configuration code
+- **Error Handling**: Analyze exception patterns and error management
 
 ### ⚡ **Performance Optimized**
-- SQLite-based indexing for fast queries
-- Tree-sitter AST parsing for accurate code analysis
-- Caching for frequently accessed queries
-- Incremental re-indexing support
+- **SQLite-based Indexing**: Fast queries with structured data storage
+- **Regex-based Parsing**: Reliable Java code analysis with fallback strategies  
+- **Output Length Management**: Pagination and limits to prevent overwhelming responses
+- **Incremental Re-indexing**: Efficient updates for repository changes
+- **Query Caching**: LRU cache for frequently accessed data
 
 ## Installation
 
@@ -73,27 +83,18 @@ python -m ballerina_mcp.main
 
 ### Available MCP Tools
 
+#### Core Search & Analysis Tools
+
 #### 1. `search_code(query: str, limit: int = 10)`
-Basic search through the codebase for classes, methods, and content.
+Enhanced fuzzy search through the codebase with relevance scoring and multi-word matching.
 
 **Example:**
 ```
-Query: "completion"
-Returns: Classes and methods related to code completion
+Query: "completion provider"
+Returns: Ranked results for completion-related classes and methods
 ```
 
-#### 2. `advanced_search(query: str, search_type: str = "fuzzy", limit: int = 10)`
-Enhanced search with different strategies:
-- `fuzzy`: Multi-word matching with relevance scoring
-- `exact`: Exact string matching
-
-**Example:**
-```
-Query: "text document hover", Type: "fuzzy"
-Returns: Ranked results for hover functionality
-```
-
-#### 3. `get_class_info(class_name: str)`
+#### 2. `get_class_info(class_name: str)`
 Get detailed information about a specific class including all methods and fields.
 
 **Example:**
@@ -102,7 +103,7 @@ Query: "CompletionProvider"
 Returns: Full class definition, methods, and context
 ```
 
-#### 4. `get_repository_stats()`
+#### 3. `get_repository_stats()`
 Get comprehensive statistics about the indexed repository.
 
 **Returns:**
@@ -111,7 +112,7 @@ Get comprehensive statistics about the indexed repository.
 - Largest classes by line count
 - Indexing health metrics
 
-#### 5. `find_similar_methods(method_name: str, limit: int = 5)`
+#### 4. `find_similar_methods(method_name: str, limit: int = 5)`
 Find methods with similar names using phonetic matching algorithms.
 
 **Example:**
@@ -120,11 +121,10 @@ Query: "getCompletion"
 Returns: getCompletion, getCompletions, findCompletion, etc.
 ```
 
-#### 6. `reindex_repository()`
-Re-index the repository to pick up new changes.
+#### LSP Protocol Analysis Tools
 
-#### 7. `find_lsp_protocol_implementations(protocol_method: str = "")`
-Find implementations of specific LSP protocol methods.
+#### 5. `find_lsp_protocol_implementations(protocol_method: str = "")`
+Find implementations of specific LSP protocol methods or search for common LSP patterns.
 
 **Example:**
 ```
@@ -132,24 +132,90 @@ Query: "textDocument/hover"
 Returns: All hover-related implementations
 ```
 
+#### 6. `analyze_lsp_capabilities(limit: int = 10)`
+Analyze what LSP capabilities are implemented in the server.
+
+**Returns:**
+- List of implemented LSP features
+- Corresponding implementation classes
+- Coverage analysis
+
+#### 7. `find_protocol_handlers(limit: int = 10)`
+Find classes that handle LSP protocol messages (Handlers, Providers, Services, Managers).
+
+#### Code Structure & Quality Tools
+
+#### 8. `analyze_dependencies(class_name: str, limit: int = 15)`
+Find what classes/methods a given class depends on and what depends on it.
+
+**Example:**
+```
+Query: "DocumentSymbolProvider"
+Returns: Classes that reference or use this provider
+```
+
+#### 9. `find_design_patterns(pattern_type: str = "", limit: int = 15)`
+Identify common design patterns in the codebase.
+
+**Supported Patterns:**
+- `factory`: Factory, Creator, Builder patterns
+- `observer`: Observer, Listener, Event, Handler patterns
+- `singleton`: Singleton pattern implementations
+- `adapter`: Adapter, Wrapper patterns
+- `decorator`: Decorator patterns
+- `visitor`: Visitor pattern implementations
+- `strategy`: Strategy, Policy patterns
+- `command`: Command, Action, Execute patterns
+
+#### 10. `get_method_hierarchy(method_name: str)`
+Find method overrides, implementations, and inheritance hierarchy.
+
+#### 11. `analyze_configuration()`
+Find configuration files, properties, and setup code.
+
+#### 12. `get_file_structure_overview(limit: int = 15)`
+Get an overview of the repository file structure and package organization.
+
+#### 13. `analyze_code_complexity()`
+Analyze code complexity metrics including method sizes and control structures.
+
+#### 14. `find_error_handling_patterns()`
+Find error handling patterns and exception usage throughout the codebase.
+
+#### Repository Management Tools
+
+#### 15. `reindex_repository()`
+Re-index the repository to pick up new changes.
+
+## Architecture
+
 ## Architecture
 
 ### Components
 
-1. **JavaCodeIndexer**: Core indexing engine using Tree-sitter
-   - Parses Java files into AST
-   - Extracts classes, methods, fields, and imports
-   - Stores structured data in SQLite
+1. **JavaCodeIndexer**: Core indexing engine with hybrid parsing approach
+   - **Primary**: Regex-based Java parsing for reliable code analysis
+   - **Fallback**: Tree-sitter AST parsing for complex scenarios
+   - Extracts classes, methods, fields, and imports with full metadata
+   - Stores structured data in SQLite with proper indexing
 
-2. **ServerConfig**: Configuration management
-   - Environment variable handling
-   - Default value management
-   - Validation
+2. **ServerConfig**: Configuration management system
+   - Environment variable handling with validation
+   - Default value management and type safety
+   - Repository path and database configuration
 
-3. **MCP Tools**: FastMCP-based tool implementations
-   - Search functionality
-   - Analytics and reporting
-   - Repository management
+3. **FastMCP Tools**: Comprehensive tool suite (15+ tools)
+   - **Search Tools**: Enhanced fuzzy search with relevance scoring
+   - **Analysis Tools**: Repository metrics, complexity analysis, dependency mapping
+   - **LSP Tools**: Protocol discovery, capability analysis, handler detection
+   - **Quality Tools**: Design pattern recognition, error handling analysis
+   - **Management Tools**: Re-indexing and repository maintenance
+
+4. **Output Management**: Smart response handling
+   - Pagination for large result sets
+   - Configurable limits to prevent overwhelming responses
+   - Truncation indicators and summary statistics
+   - Relevance-based result ranking
 
 ### Database Schema
 
@@ -163,20 +229,29 @@ The server uses SQLite with the following main tables:
 ## Performance Considerations
 
 ### Indexing Performance
-- Initial indexing time depends on repository size
-- Incremental updates for changed files only
-- Hash-based change detection
+- **Initial indexing time**: Depends on repository size (typically 30-60 seconds for large repos)
+- **Incremental updates**: Only changed files are re-processed
+- **Hash-based change detection**: Efficient file modification tracking
+- **Database migration**: Automatic schema updates for compatibility
 
 ### Query Performance
-- Indexed searches on names and content
-- Relevance-based result ranking
-- Configurable result limits
-- Query caching for frequent searches
+- **Indexed searches**: Fast lookups on names, content, and metadata
+- **Relevance-based ranking**: Multi-word fuzzy search with scoring
+- **Configurable result limits**: Prevent overwhelming responses (default 10-15 results)
+- **LRU query caching**: Frequently accessed data cached in memory
+- **Pagination support**: Large result sets handled efficiently
 
 ### Memory Usage
-- SQLite provides efficient storage
-- Tree-sitter uses minimal memory for parsing
-- LRU cache for frequently accessed data
+- **SQLite storage**: Efficient disk-based indexing with minimal memory footprint
+- **Regex parsing**: Lower memory usage compared to full AST parsing
+- **Output truncation**: Long content automatically shortened with indicators
+- **Streaming results**: Large queries processed incrementally
+
+### Response Optimization
+- **Output length management**: Automatic pagination and truncation
+- **Smart summarization**: Key information highlighted in responses
+- **Progress indicators**: Clear feedback on result completeness
+- **Error boundaries**: Graceful handling of parsing and query errors
 
 ## Troubleshooting
 
@@ -196,6 +271,16 @@ The server uses SQLite with the following main tables:
    - Try re-indexing with `reindex_repository()`
    - Check if files have been recently modified
    - Verify file extensions are supported (.java)
+
+4. **Tool output too long**
+   - All tools now have built-in pagination and output limits
+   - Use `limit` parameters to control result count
+   - Responses automatically truncate with clear indicators
+
+5. **Parsing errors**
+   - Server uses robust regex-based parsing as primary method
+   - Automatic fallback handling for complex code structures
+   - Database schema automatically migrates for compatibility
 
 ### Logging
 The server uses Python's standard logging module. Set log level:
